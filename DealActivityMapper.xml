@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ge.treasury.myfunding.mapper.myfunding.DealActivityMapper">
+	
+	<resultMap id="BaseResultMap" type="com.ge.treasury.myfunding.dto.DealActivityDTO">
+		<id column="ACTIVITY_ID" jdbcType="DECIMAL" property="activityID" />
+		<result column="DEAL_ID" jdbcType="DECIMAL" property="dealId" />
+		<result column="SSO" jdbcType="VARCHAR" property="sso" />
+		<result column="USER_NAME" jdbcType="VARCHAR" property="userName" />
+		<result column="USER_ROLE" jdbcType="VARCHAR" property="userRole" />
+		<result column="ACTION" jdbcType="VARCHAR" property="action" />
+		<result column="ACT_COMMENT" jdbcType="VARCHAR" property="actComment" />
+		<result column="CREATE_TIMESTAMP" jdbcType="TIMESTAMP" property="createTimeStamp" />
+		<result column="CREATE_USER" jdbcType="VARCHAR" property="createUser" />
+		<result column="LAST_UPDATE_TIMESTAMP" jdbcType="TIMESTAMP" property="lastUpdateTimestamp" />
+		<result column="LAST_UPDATE_USER" jdbcType="VARCHAR" property="lastUpdateUser" />
+	</resultMap>
+
+	<sql id="Base_Column_List">
+		ACTIVITY_ID,DEAL_ID,SSO,USER_NAME,USER_ROLE,ACTION,ACT_COMMENT,
+		CREATE_TIMESTAMP,CREATE_USER,LAST_UPDATE_TIMESTAMP,LAST_UPDATE_USER
+	</sql>
+
+	<select id="selectByDealId" parameterType="java.lang.Integer" resultMap="BaseResultMap">
+		SELECT 
+		 <include refid="Base_Column_List" />
+		 FROM MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+		where DEAL_ID = #{dealId,jdbcType=DECIMAL}
+	</select>
+	<select id="selectByActivityId" parameterType="java.lang.Integer" resultMap="BaseResultMap">
+		SELECT 
+		 <include refid="Base_Column_List" />
+		 FROM MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+		where ACTIVITY_ID = #{activityID,jdbcType=DECIMAL}
+	</select>
+
+	<insert id="insert" parameterType="com.ge.treasury.myfunding.dto.DealActivityDTO">
+		
+		<selectKey keyProperty="activityID" order="BEFORE" resultType="java.lang.Integer">
+		 	 SELECT MYFUNDING.SEQ_DEAL_ACTIVITY_ID.nextval FROM dual
+		 </selectKey>
+		
+		INSERT INTO
+		MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+		(ACTIVITY_ID,DEAL_ID,SSO,USER_NAME,USER_ROLE,ACTION,ACT_COMMENT,
+		CREATE_TIMESTAMP,CREATE_USER,LAST_UPDATE_TIMESTAMP,LAST_UPDATE_USER)
+		VALUES
+		(#{activityID,jdbcType=DECIMAL},#{dealId,jdbcType=DECIMAL},#{sso,jdbcType=VARCHAR},#{userName,jdbcType=VARCHAR},
+		#{userRole,jdbcType=VARCHAR},#{action,jdbcType=VARCHAR},#{actComment,jdbcType=VARCHAR},#{createTimeStamp,jdbcType=TIMESTAMP},
+		#{createUser,jdbcType=VARCHAR},#{lastUpdateTimestamp,jdbcType=TIMESTAMP},#{lastUpdateUser,jdbcType=VARCHAR})
+	</insert>
+	
+	<insert id="insertSelective" parameterType="com.ge.treasury.myfunding.dto.DealActivityDTO">
+		 <selectKey keyProperty="activityID" order="BEFORE" resultType="java.lang.Integer">
+		 	 SELECT MYFUNDING.SEQ_DEAL_ACTIVITY_ID.nextval FROM dual
+		 </selectKey>
+		insert into MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+		<trim prefix="(" suffix=")" suffixOverrides=",">
+		ACTIVITY_ID,
+			<if test="dealId != null">
+			DEAL_ID,
+			</if>
+			<if test="sso != null">
+			SSO,
+			</if>
+			<if test="userName != null">
+			USER_NAME,
+			</if>
+			<if test="userRole != null">
+			USER_ROLE,
+			</if>
+			<if test="action != null">
+			ACTION,
+			</if>
+			<if test="actComment != null">
+			ACT_COMMENT,
+			</if>
+			<if test="createTimeStamp != null">
+			CREATE_TIMESTAMP,
+			</if>
+			<if test="createUser != null">
+			CREATE_USER,
+			</if>
+			<if test="lastUpdateTimestamp != null">
+			LAST_UPDATE_TIMESTAMP,
+			</if>
+			<if test="lastUpdateUser != null">
+			LAST_UPDATE_USER,
+			</if>
+		</trim>
+		<trim prefix="values (" suffix=")" suffixOverrides=",">
+			#{activityID,jdbcType=DECIMAL}
+			<if test="dealId != null">
+       			 #{dealId,jdbcType=DECIMAL},
+     		 </if>
+     		 <if test="sso != null">
+       			 #{sso,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="userName != null">
+       			 #{userName,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="userRole != null">
+       			 #{userRole,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="action != null">
+       			 #{action,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="actComment != null">
+       			 #{actComment,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="createTimeStamp != null">
+       			 #{createTimeStamp,jdbcType=TIMESTAMP},
+     		 </if>
+     		 <if test="createUser != null">
+       			 #{createUser,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="lastUpdateTimestamp != null">
+       			 #{lastUpdateTimestamp,jdbcType=TIMESTAMP},
+     		 </if>
+     		  <if test="lastUpdateUser != null">
+       			 #{lastUpdateUser,jdbcType=VARCHAR},
+     		 </if>
+     	</trim>
+     </insert>
+     
+     <update id="updateByPrimaryKey" parameterType="com.ge.treasury.myfunding.dto.DealActivityDTO">
+     	
+     	update MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+     	
+     	set ACTIVITY_ID = #{activityID,jdbcType=DECIMAL},
+     	DEAL_ID =  #{dealId,jdbcType=DECIMAL},
+     	SSO =  #{sso,jdbcType=VARCHAR},
+     	USER_NAME = #{userName,jdbcType=VARCHAR},
+     	USER_ROLE =  #{userRole,jdbcType=VARCHAR},
+     	ACTION = #{action,jdbcType=VARCHAR},
+     	ACT_COMMENT = #{actComment,jdbcType=VARCHAR},
+     	CREATE_TIMESTAMP = #{createTimeStamp,jdbcType=TIMESTAMP},
+     	CREATE_USER =  #{createUser,jdbcType=VARCHAR},
+     	LAST_UPDATE_TIMESTAMP =  #{lastUpdateTimestamp,jdbcType=TIMESTAMP},
+     	LAST_UPDATE_USER =  #{lastUpdateUser,jdbcType=VARCHAR}
+     	
+     	where ACTIVITY_ID = #{activityID,jdbcType=DECIMAL} 
+     
+     </update>
+     
+     <update id="updateByPrimaryKeySelective" parameterType="com.ge.treasury.myfunding.dto.DealActivityDTO">
+     
+     	update MYFUNDING.T_MYFUND_DEAL_ACTIVITY
+     	
+     	<set>
+     		<if test="activityID != null">
+     		ACTIVITY_ID=#{activityID,jdbcType=DECIMAL}
+     		</if>
+			<if test="dealId != null">
+       			DEAL_ID =  #{dealId,jdbcType=DECIMAL},
+     		 </if>
+     		 <if test="sso != null">
+       			SSO =  #{sso,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="userName != null">
+       			USER_NAME = #{userName,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="userRole != null">
+       			USER_ROLE = #{userRole,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="action != null">
+       			ACTION = #{action,jdbcType=VARCHAR},
+     		 </if>
+     		  <if test="actComment != null">
+       			ACT_COMMENT = #{actComment,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="createTimeStamp != null">
+       			 CREATE_TIMESTAMP =#{createTimeStamp,jdbcType=TIMESTAMP},
+     		 </if>
+     		 <if test="createUser != null">
+       			CREATE_USER = #{createUser,jdbcType=VARCHAR},
+     		 </if>
+     		 <if test="lastUpdateTimestamp != null">
+       			 LAST_UPDATE_TIMESTAMP = #{lastUpdateTimestamp,jdbcType=TIMESTAMP},
+     		 </if>
+     		  <if test="lastUpdateUser != null">
+       			LAST_UPDATE_USER =  #{lastUpdateUser,jdbcType=VARCHAR},
+     		 </if>
+     	</set>
+     	where ACTIVITY_ID = #{activityID,jdbcType=DECIMAL}
+     
+     </update>
+
+ </mapper>
+  	
+    
+    
+  
