@@ -191,10 +191,11 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
 					} else {
 						//insertTeamActivity(deal,user,ControllersConstants.CHECK);
 						team = (Team) setdefaults(team, user, ControllersConstants.UPDATE);
-						insertDealActivity(dealLocal, user, ControllersConstants.CREATE);
-						teamMapper.updateByPrimaryKey(team);
 						
+						teamMapper.updateByPrimaryKey(team);
+						insertTeamActivity(dealLocal, team,user, ControllersConstants.CREATE);
 						MyFundingLogger.logDebug(this, "team update:" + team.getDealTeamActorId());
+						
 					}
 				}
 			}
@@ -519,7 +520,7 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
             }
         }
          if (null != operation && "create".equalsIgnoreCase(operation)) {
-        	 String roleActivity = user.getAppRole()+"_REVIEWPENDING";
+        	 //String roleActivity = user.getAppRole()+"_REVIEWPENDING";
              dealActivity.setSso(user.getSso());
              dealActivity.setUserName(user.getUserDetails());
              dealActivity.setUserRole(user.getAppRole());
@@ -529,8 +530,8 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
              dealActivity.setLastUpdateUser(user.getSso());
              dealActivity.setDealId(dealAct.getDealId());
              //String dealStatusCode = dealAct.getDealStatusCode();
-             String role = user.getAppRole();
-             dealActivity.setAction(roleActivity);
+            // String role = user.getAppRole();
+             //dealActivity.setAction(roleActivity);
              dealActivity.setAction(dealStatusCode);
              if (dealStatusCode.equals(ControllersConstants.DEALSTATUS_SUBMIT)){
                  dealActivity.setActComment(ControllersConstants.DEALSTATUS_SUBMIT_DISPLAY);
@@ -556,7 +557,7 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
              else{
                  dealActivity.setActComment("Undefined");
              }
-             dealActivity.setActComment(role+" - review pending");
+             //dealActivity.setActComment(role+" - review pending");
              activityMapper.insert(dealActivity);
          }
          //dealActivity = (DealActivity) setdefaults(dealActivity,user,operation);
@@ -564,10 +565,10 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
          //return dealActivity;
      }
    
-    public void insertTeamActivity(Deal dealAct, User user, String operation) {
+    public void insertTeamActivity(Deal dealAct, Team team,User user, String operation) {
         DealActivityDTO dealActivity = new DealActivityDTO();
         
-        String roleActivity = user.getAppRole()+"_REVIEWPENDING";
+        String roleActivity = team.getDealTeamActorCode()+"_REVIEWPENDING";
         if (null != operation && "check".equalsIgnoreCase(operation)) {
             DealActivityDTO searchActivity= new DealActivityDTO();
             searchActivity.setDealId(dealAct.getDealId());
@@ -586,7 +587,7 @@ public class MyFundingRequestServiceManagerImpl implements MyFundingRequestManag
              dealActivity.setLastUpdateTimestamp(new Date());
              dealActivity.setLastUpdateUser(user.getSso());
              dealActivity.setDealId(dealAct.getDealId());
-             String role = user.getAppRole();
+             String role = team.getDealTeamActorCode();
              dealActivity.setAction(roleActivity);
             
              //dealActivity.setActComment(role+" - Completed review");
