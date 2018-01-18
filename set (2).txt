@@ -1,0 +1,361 @@
+Text
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/******************************************************************************************************************                  
+ Procedure name:  stp_Peoplesoft_feed_Tax_Precheck                  
+ Purpose:   Stored procedure does precheck for Tax Data files.                  
+ Created Date:  11-Oct-2007                  
+ Last Modified Date:                   
+ Author:   PCS                  
+ Kintana ID:  1427911                  
+ Description:  This procedure returns all data issues in the TAX File.        
+stp_Peoplesoft_feed_Tax_Precheck '2010-09-03', '2010-09-24'                 
+Modification log : RITM13569874 - Change PeS Interfaces to use PMPR code filters from a config table, February 2017
+*******************************************************************************************************************/                  
+CREATE Procedure [KPMGLink].[stp_Peoplesoft_feed_Tax_Precheck] (@m_DtFromDate datetime, @m_DtToDate datetime) as                
+        
+SET ANSI_WARNINGS OFF        
+SET ANSI_NULLS ON        
+SET QUOTED_IDENTIFIER ON        
+        
+----------------------------------------------------------------------------------------------------------           
+--BJM Update Date:2008-11-24          
+--stp_bjm_update_job_history_master inserts a record into job history table and returns @job_history_id                   
+--@rowcnt and @error_number are variables to track the row count to log errors                  
+----------------------------------------------------------------------------------------------------------          
+Declare @rowcnt int        
+Exec stp_bjm_update_job_history_master 18,0, 'Started', 'I', 0        
+---------------------------------------------------------------------------------------------------------          
+BEGIN TRY                       
+
+/*******************************************************************************************************************/
+--TEMP TABLE TO GET THE VALUES OF ALL US PAYROLLS
+CREATE TABLE #temp_pmpr
+(
+	PMPR_CODE VARCHAR(25)
+)
+
+INSERT INTO #temp_pmpr (PMPR_CODE)
+SELECT DISTINCT CODE.PMPR_CODE FROM LINK_GE..PMPR_CODES CODE
+INNER JOIN LINK_GE..PMPR_CODES_VALUE VAL ON VAL.PMPR_CODE_ID = CODE.PMPR_CODE_ID
+INNER JOIN KPMGLINK..PAYROLL KPMG ON KPMG.DESCRIPTION = CODE.PMPR_CODE AND KPMG.AP_CODE = '53'
+WHERE VAL.VALUE_TYPE = 'inactive_pmpr_precheck'
+/*******************************************************************************************************************/
+  
+       
+/*Create the main temporary table (#tempMainActivation) for storing all the activation assignments.*/          
+Create Table #tempMainActivation          
+(          
+ assignment_id int,          
+ person_id int,          
+ home_country int,          
+ host_country int,          
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+-- SOCIAL_INSURANCE_CODE varchar(24),
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+ HR_CODE varchar(24),          
+ host_pmpr varchar(24),          
+ home_pmpr varchar(24)        
+)        
+        
+/*Inserting into the main temporary table (#tempMainActivation) all the activation assignments.*/          
+Insert Into #tempMainActivation          
+Select           
+ asgn.assignment_id As assignment_id,           
+ expatriate_person_id As person_id,           
+ Hmctry.place_id As 'Home_Country',          
+ HstCtry.place_id As 'Host_Country',          
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+-- prsn.social_insurance_code,        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+ prsn.hr_code,        
+ isnull(HostPay.description,'99999') As host_pmpr,          
+ isnull(HomePay.description,'99999') As home_pmpr        
+from  kpmglink..assignment As asgn          
+inner join kpmglink..person prsn        
+  on asgn.expatriate_person_id = prsn.person_id         
+ Inner Join kpmglink..Assignment_history As asgn_hist          
+  on asgn.assignment_id = asgn_hist.assignment_id          
+ Inner Join kpmglink..Business_place As HstBusPlace           
+  on Asgn.Host_business_place_id = HstBusPlace.Business_place_id          
+ Inner Join kpmglink..Place  As HstCity          
+  On HstBusPlace.City_Place_id = HstCity.Place_id          
+ Inner Join kpmglink..Place As HstCtry           
+  On HstCity.Parent_Place_id = HstCtry.Place_id           
+ Inner Join kpmglink..Business_place As HomeBusPlace           
+  on  Asgn.Home_business_place_id = HomeBusPlace.Business_place_id           
+ Inner Join kpmglink..Place As HmCity           
+  On HomeBusPlace.City_Place_id =HmCity.Place_id           
+ Inner Join kpmglink..Place As Hmctry          
+  On HmCity.Parent_Place_id = Hmctry.Place_id          
+ Inner Join Link_GE..ASSIGNMENT_HISTORY_VW asgn_hist_host          
+                on asgn.assignment_id = asgn_hist_host.assignment_id          
+ Inner join  kpmglink..Payroll HostPay          
+        on HostPay.payroll_id = asgn_hist_host.value          
+                and  asgn_hist_host.field_name = 'Host Payroll Group'          
+ Inner Join Link_GE..ASSIGNMENT_HISTORY_VW asgn_hist_home   
+                on asgn.assignment_id = asgn_hist_home.assignment_id          
+ Inner join  kpmglink..Payroll HomePay          
+        on HomePay.payroll_id = asgn_hist_home.value          
+                and  asgn_hist_home.field_name = 'Home Payroll Group'          
+ where           
+  asgn_hist.field_name = 'Assignment_activate_date'           
+  and convert(datetime,asgn_hist.value) between @m_DtFromDate and @m_DtToDate        
+--and convert(datetime,asgn_hist.value) between '04/03/2008' and '04/10/2008'        
+      
+/*--#1558814 new scenario PMPR change Create the PMPR change temporary table (#tempPMPRchange)       
+for storing all the PMPR change assignments.*/       
+Create Table #tempPMPRchange                                    
+(                                    
+ assignment_id int,                                    
+ person_id int,                                  
+-- GBS #: 45219615 - SSN to SSO in tax data file - start   
+-- emplid char(11),                                    
+-- aquisition_flag char(1),                                    
+-- newhire char(1),                                    
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+ home_country int,                                    
+ host_country int,                                    
+ marital_status_code varchar(24),                                    
+ host_pmpr varchar(24),                                    
+ home_pmpr varchar(24),                    
+ scenario_id int,                                    
+ activation_date datetime,                                    
+ actual_start_date datetime,                                    
+ comp_pmpr varchar(24),                                    
+ deactivation_date datetime,                                    
+ IW_Removal_Reason varchar(255),                                    
+ action char(3),                                    
+ action_reason char(3),                                    
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--salary_amount float,                                 
+ salary_amount float   
+-- peoplesoft_empl_status char(1)                        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+)                                    
+          
+set @m_DtToDate = @m_DtToDate + 1      
+      
+EXECUTE stp_peoplesoft_feed_find_PMPRchange  @m_DtFromDate , @m_DtToDate       
+          
+insert into #tempMainActivation                      
+(assignment_id,      
+ person_id ,          
+ home_country ,          
+ host_country ,          
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+-- SOCIAL_INSURANCE_CODE ,          
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+ HR_CODE ,          
+ host_pmpr ,          
+ home_pmpr)     
+Select                                     
+assignment_id,      
+ prsn.person_id ,          
+ home_country ,          
+ host_country ,      
+-- GBS #: 45219615 - SSN to SSO in tax data file - start     
+-- prsn.SOCIAL_INSURANCE_CODE ,          
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+ prsn.HR_CODE ,          
+ host_pmpr ,          
+ home_pmpr       
+from #tempPMPRchange       
+inner join kpmglink..person prsn      
+on #tempPMPRchange.person_id = prsn.person_id      
+           
+-- GBS #: 45219615 - SSN to SSO in tax data file - added -- start
+create table #tax_precheck (Comments varchar(50), hr_code varchar(24))
+-- GBS #: 45219615 - SSN to SSO in tax data file - added -- end
+      
+--Query to Check Home State TAX Status        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Home State Tax Status Missing' as comments, prsn.social_insurance_code,prsn.hr_code
+--into #tax_precheck        
+insert into #tax_precheck 
+select 'Home State Tax Status Missing', prsn.hr_code
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id        
+left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOME STATE TAX STATUS'        
+where  t.home_country = 53 and asgn_hist.value is null        
+
+
+--Query to Check Host State TAX Status
+insert into #tax_precheck        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Host State Tax Status Missing' as comments,prsn.social_insurance_code,prsn.hr_code
+select 'Host State Tax Status Missing', prsn.hr_code
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id  left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOST STATE TAX STATUS'        
+where  t.host_country = 53        
+and asgn_hist.value is null        
+
+        
+--Query to Check Home Federal TAX Status
+insert into #tax_precheck        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Home Federal Tax Status Missing' as comments, prsn.social_insurance_code,prsn.hr_code        
+select 'Home Federal Tax Status Missing', prsn.hr_code        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id        
+left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOME FEDERAL TAX STATUS'        
+where  t.home_country = 53        
+and asgn_hist.value is null        
+
+        
+--Query to Check Host Federal TAX Status
+insert into #tax_precheck         
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Host Federal Tax Status Missing' as comments, prsn.social_insurance_code,prsn.hr_code      
+select 'Host Federal Tax Status Missing', prsn.hr_code      
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id        
+left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOST FEDERAL TAX STATUS'        
+where  t.host_country = 53        
+and asgn_hist.value is null        
+        
+--Query to Check Home Resident State        
+insert into #tax_precheck        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Home Resident State is Missing' as comments, prsn.social_insurance_code,prsn.hr_code        
+select 'Home Resident State is Missing', prsn.hr_code        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id        
+left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOME RESIDENT STATE'        
+where  t.home_country = 53        
+and asgn_hist.value is null        
+        
+--Query to Check Host Resident State        
+insert into #tax_precheck        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--select 'Host Resident State is Missing' as comments, prsn.social_insurance_code,prsn.hr_code        
+select 'Host Resident State is Missing', prsn.hr_code        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+from #tempMainActivation t         
+inner join kpmglink..person prsn        
+on t.person_id = prsn.person_id        
+left join ASSIGNMENT_HISTORY_VW asgn_hist        
+on t.assignment_id = asgn_hist.assignment_id        
+and asgn_hist.field_name = 'HOST RESIDENT STATE'        
+where  t.host_country = 53        
+and asgn_hist.value is null        
+        
+         
+---Check if any row has SSN blank.        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck        
+--select 'SSN is blank' as comments, SSN as  'social_insurance_code','' as 'hr_code'        
+-- from Link_GE..tbl_peoplesoft_feed_tax          
+--where SSN is null        
+insert into #tax_precheck        
+select 'SSO is blank' as comments, SSO as 'hr_code'
+ from Link_GE..tbl_peoplesoft_feed_tax          
+where SSO is null        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+        
+---Check if any row has Company blank.        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck        
+--select 'Effective Date is blank' as comments, SSN as 'social_insurance_code','' as 'hr_code'        
+-- from Link_GE..tbl_peoplesoft_feed_tax          
+--where EFFDT is null        
+insert into #tax_precheck        
+select 'Effective Date is blank' as comments, SSO as 'hr_code'
+ from Link_GE..tbl_peoplesoft_feed_tax          
+where EFFDT is null        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+        
+---Check if any row has EffDt blank.        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck        
+--select 'Company is blank' as comments, SSN as 'social_insurance_code','' as 'hr_code'        
+-- from Link_GE..tbl_peoplesoft_feed_tax          
+--where COMPANY is null        
+insert into #tax_precheck        
+select 'Company is blank' as comments, SSO as 'hr_code'
+ from Link_GE..tbl_peoplesoft_feed_tax          
+where COMPANY is null        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+        
+--Check if any SSN has dup GEIS rows.        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck        
+--select 'Duplicate Record with SSN and GEIS' as comments, SSN as 'social_insurance_code',geis as 'hr_code'        
+-- from Link_GE..tbl_peoplesoft_feed_tax          
+--group by ssn, geis        
+--having count(*) > 1        
+insert into #tax_precheck        
+select 'Duplicate Record with SSO and GEIS' as comments, SSO as 'hr_code'
+ from Link_GE..tbl_peoplesoft_feed_tax          
+group by sso, geis        
+having count(*) > 1        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+        
+--Check if StateResident is populated for all State records.        
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck        
+--select 'StateResident not Populated for State Record' as comments, SSN as 'social_insurance_code', '' as 'hr_code'         
+-- from Link_GE..tbl_peoplesoft_feed_tax          
+--where state_resident = 'Y' and GEIS is null        
+insert into #tax_precheck        
+select 'StateResident not Populated for State Record' as comments, SSO as 'hr_code'
+ from Link_GE..tbl_peoplesoft_feed_tax          
+where state_resident = 'Y' and GEIS is null        
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+    
+--Check for 02025 code    
+-- GBS #: 45219615 - SSN to SSO in tax data file - start 
+--insert into #tax_precheck       
+--select 'Payroll code 02025'as comments,tax.ssn as  'social_insurance_code','' as 'hr_code'       
+--from Link_GE..tbl_peoplesoft_feed_tax tax    
+--inner join #tempMainActivation asgn    
+--on tax.ssn = asgn.social_insurance_code    
+--where home_pmpr = '02025' or host_pmpr = '02025'      
+insert into #tax_precheck       
+select 'Payroll code 02025'as comments,tax.sso as  'hr_code'
+from Link_GE..tbl_peoplesoft_feed_tax tax    
+inner join #tempMainActivation asgn    
+on tax.sso = asgn.hr_code    
+--RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - START --
+where home_pmpr IN --'02025'
+(SELECT DISTINCT PMPR_CODE FROM #temp_pmpr)
+or host_pmpr IN --'02025'      
+(SELECT DISTINCT PMPR_CODE FROM #temp_pmpr)
+--RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - END --
+-- GBS #: 45219615 - SSN to SSO in tax data file - end
+        
+select * from #tax_precheck        
+select @rowcnt = count(1) from #tax_precheck  
+  
+  
+drop table #tempMainActivation        
+drop table #tax_precheck      
+drop table #tempPMPRchange  
+  
+ Exec stp_bjm_update_job_history_master 18,@rowcnt,'Success', 'U', 1    
+END TRY              
+BEGIN CATCH              
+  Exec stp_bjm_update_job_history_master 18,0,'Failure', 'U', 1        
+END CATCH;                
+----------------------------------------------------------------------------------------------------------   
+
