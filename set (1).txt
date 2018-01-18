@@ -1,0 +1,2108 @@
+
+
+/******************************************************************************************************************                
+
+ Procedure name:  stp_Peoplesoft_feed_Tax_Initial_Setup                
+
+ Purpose:   Stored procedure for generation of Federal Tax Records for Initial Setup.                
+
+ Date:   04-Dec-2004                
+
+ Author:    PCS                
+
+ Kintana ID:                  
+
+ Description:  This procedure is called from main stored procedure - stp_peoplesoft_feed_main                
+
+    This procedures generates records for initial setup of federal tax records of the                 
+
+    expats added during te run period. Tables referred from main stored procedure are                 
+
+     #tempMainActivation - This has all the assignments activated during the run                 
+
+     period.                
+
+stp_Peoplesoft_feed_Tax_Initial_Setup '2010-04-22','2010-07-30'          
+
+
+
+Change log: RITM13569874 - Change PeS Interfaces to use PMPR code filters from a config table, February 2017
+
+Changes dated 30 July 2014: Send Marital Status as 'X' for records with special status as 'G'
+
+						Records fail at PeS end when we send actual marital status of GME's whose tax setup is "Worksheet(G)". 
+
+						So we start sending 'X' in marital status field only for State/Locality records for GME's whose tax setup is "Worksheet".
+
+Modification log : RITM13569874 - Change PeS Interfaces to use PMPR code filters from a config table, February 2017
+
+*******************************************************************************************************************/                
+
+CREATE procedure [KPMGLink].[stp_Peoplesoft_feed_Tax_Initial_Setup] (@m_DtFromDate datetime, @m_DtToDate datetime) as                 
+
+                
+
+SET NOCOUNT ON                
+
+SET ANSI_WARNINGS OFF                
+
+ ----------------------------------------------------------------------------------------------------------             
+
+--BJM Update Date:2008-11-24            
+
+--stp_bjm_update_job_history_master inserts a record into job history table and returns @job_history_id                     
+
+--@rowcnt and @error_number are variables to track the row count to log errors                    
+
+----------------------------------------------------------------------------------------------------------            
+
+Declare @rowcnt int          
+
+Exec stp_bjm_update_job_history_master 11,0, 'Started', 'I', 0          
+
+---------------------------------------------------------------------------------------------------------            
+
+/*******************************************************************************************************************/
+
+--TEMP TABLE TO GET THE VALUES OF ALL US PAYROLLS
+
+CREATE TABLE #temp_pmpr
+
+(
+
+	PMPR_CODE_ID INT,
+
+	PMPR_CODE VARCHAR(25),
+
+	PMPR_VALUE VARCHAR(25),
+
+	PMPR_VALUE_TYPE VARCHAR(25)
+
+)
+
+
+
+INSERT INTO #temp_pmpr (PMPR_CODE_ID,PMPR_CODE,PMPR_VALUE,PMPR_VALUE_TYPE)
+
+SELECT DISTINCT CODE.PMPR_CODE_ID,CODE.PMPR_CODE,VAL.VALUE,VAL.VALUE_TYPE FROM LINK_GE..PMPR_CODES CODE
+
+INNER JOIN LINK_GE..PMPR_CODES_VALUE VAL ON VAL.PMPR_CODE_ID = CODE.PMPR_CODE_ID
+
+INNER JOIN KPMGLINK..PAYROLL KPMG ON KPMG.DESCRIPTION = CODE.PMPR_CODE AND KPMG.AP_CODE = '53'
+
+
+
+/*******************************************************************************************************************/
+
+BEGIN TRY                       
+
+                
+
+/*get the file run dates from the schedule table*/                
+
+--Declare @m_DtFromDate Datetime                
+
+--Declare @m_DtToDate Datetime                
+
+                
+
+--Select @m_DtFromDate = '09/15/2005'                
+
+--Select @m_DtToDate = '10/15/2005'                
+
+                
+
+/* DELETE - Code below to be deleted once integrated into main stored proc*/                
+
+/*Create the main temporary table (#tempMainActivation) for storing all the activation assignments.*/                
+
+Create Table #tempMainActivation  
+
+(                
+
+ assignment_id int,                
+
+ person_id int,                
+
+-- emplid char(11),                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- aquisition_flag char(1),                
+
+-- newhire char(1),                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ home_country int,                
+
+ host_country int,                
+
+ marital_status_code varchar(24),                
+
+ host_pmpr varchar(24),                
+
+ home_pmpr varchar(24),                
+
+ scenario_id int,                
+
+ activation_date datetime,                
+
+ actual_start_date datetime,                
+
+ comp_pmpr varchar(24),                
+
+ deactivation_date datetime,                
+
+ IW_Removal_Reason varchar(40),                
+
+ action char(3),                
+
+ action_reason char(3),                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- salary_amount float,                 
+
+ salary_amount float   
+
+-- peoplesoft_empl_status char(1)                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+)                
+
+                
+
+                
+
+/*Inserting into the main temporary table (#tempMainActivation) all the activation assignments.*/                
+
+Insert Into #tempMainActivation                 
+
+Select       
+
+ asgn.assignment_id As assignment_id,                 
+
+ expatriate_person_id As person_id,                 
+
+ /*56429 Start*/             
+
+                 
+
+--CIS # 593446 If peoplesoft id is not present in tbl_peoplesoft_xref table put '999999999' instead of hr_code                 
+
+--Isnull(Space(11-Len(Ltrim(rtrim(xrefssn.peoplesoft_id)))) + Ltrim(rtrim(xrefssn.peoplesoft_id)),(Isnull((Space(11 - len(ltrim(rtrim(xrefname.peoplesoft_id)))) + ltrim(rtrim(xrefname.peoplesoft_id))),Isnull(Space(11-Len(Ltrim(Rtrim(prsn.hr_code))))     
+
+
+
+
+
+
+
+
+
+
+
+
+   
+
+    
+
+      
+
+      
+
+          
+
+           
+
+--   + Ltrim(Rtrim(prsn.hr_code)),'Not   Found')))) As emplid,                
+
+/*Isnull                
+
+(                
+
+ Space(11-Len(Ltrim(rtrim(xrefssn.peoplesoft_id)))) + Ltrim(rtrim(xrefssn.peoplesoft_id)),                
+
+ (                
+
+  Isnull(                
+
+  (Space(11 - len(ltrim(rtrim(xrefname.peoplesoft_id)))) + ltrim(rtrim(xrefname.peoplesoft_id))),                
+
+  (Space(2) + '999999999')                
+
+  )                
+
+ )                
+
+)                 
+
+As emplid,    */                
+
+                   
+
+                   
+
+ /*56429 End*/                
+
+-- SC # 29506777 - Remove formtemp tables from all stored procedures - Prakash Jattani 4/Sep/2009 start    
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- aquisition_flag = case when xrefssn.peoplesoft_id is null  and xrefname.peoplesoft_id is null                 
+
+--    then null                 
+
+--    else 'N'                
+
+--    end,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end                
+
+--aquisition_flag = 'N',    
+
+-- SC # 29506777 - Remove formtemp tables from all stored procedures - Prakash Jattani 4/Sep/2009 end    
+
+ /*New hire flag needs to be set only if the employee doesnot exist in the xref file*/                
+
+ --asgn.new_hire_flag As newhire,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                
+
+-- newhire = case when xrefssn.peoplesoft_id is null  and xrefname.peoplesoft_id is null then                
+
+--   1                
+
+--     else                
+
+--   0                
+
+--     end,                   
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ --HomeBusPlace.SECURE_COUNTRY_PLACE_ID As home_country,                
+
+ --HstBusPlace.SECURE_COUNTRY_PLACE_ID As host_country,                
+
+ Hmctry.place_id As 'Home_Country',                
+
+ HstCtry.place_id As 'Host_Country',                
+
+ --prsn.marital_status_code As marital_status_code,                
+
+ marital_status_code = (kpmglink.dbo.FN_GETMARITALSTATUS(prsn.person_id,getdate())),                
+
+ --isnull(prnum.payroll_number,'99999') As host_pmpr,                 
+
+ --isnull(prsn.home_payroll_number,'99999') As home_pmpr,                
+
+ isnull(HostPay.description,'99999') As host_pmpr,                
+
+ isnull(HomePay.description,'99999') As home_pmpr,                
+
+ null As scenario_id,                
+
+ Convert(Datetime,asgn_hist.value) As activation_date,                
+
+ asgn.actual_start_date As actual_start_date,                
+
+ comp_pmpr =                 
+
+ Case                 
+
+  --When HomeBusPlace.SECURE_COUNTRY_PLACE_ID = 53 and Ltrim(Rtrim(Isnull(prsn.home_payroll_number,''))) not in ('18999','99999','')
+
+  -- Changes to add new Alstom PMPR's - 18901 and 18907 - Dec 2015                 
+
+  When Hmctry.PLACE_ID = 53 and Ltrim(Rtrim(Isnull(HomePay.description,''))) in
+
+  --RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - START --
+
+  --('18900','18902','19901','14463','02025','18901','18907')
+
+  (SELECT DISTINCT PMPR_CODE FROM #temp_pmpr)
+
+
+
+--prsn.home_payroll_number not in ('18999','99999') and prsn.home_payroll_number Is Not Null and Ltrim(Rtrim(prsn.home_payroll_number)) <> ''           
+
+   Then  Ltrim(Rtrim(HomePay.description))                
+
+  --When HstBusPlace.SECURE_COUNTRY_PLACE_ID = 53 and Ltrim(Rtrim(Isnull(prnum.payroll_number,''))) not in ('18999','99999','')                 
+
+  -- Changes to add new Alstom PMPR's - 18901 and 18907 - Dec 2015 
+
+    When Hmctry.PLACE_ID = 53 and Ltrim(Rtrim(Isnull(HostPay.description,''))) in
+
+	--('18900','18902','19901','14463','02025','18901','18907')            
+
+	(SELECT DISTINCT PMPR_CODE FROM #temp_pmpr)
+
+	--RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - END --     
+
+--prnum.payroll_number not in ('18999','99999') and prnum.payroll_number Is Not Null and Ltrim(Rtrim(prnum.payroll_number)) <> ''                
+
+   Then HostPay.description                
+
+  Else '99999'                 
+
+ End,                
+
+ null As deactivation_date,                
+
+ null As IW_Removal_Reason ,                
+
+ null As action,                
+
+ null As action_reason,                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start               
+
+-- null As salary_amount,                
+
+ null As salary_amount                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+/*Added peoplesoft status i the base table - employee status in peoplesoft                  
+
+decides scenarios.*/   
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start               
+
+-- peoplesoft_empl_status = case when xrefssn.peoplesoft_id is not null then xrefssn.empl_status                 
+
+--     when xrefname.peoplesoft_id is not null then  xrefname.empl_status                
+
+--     else null                
+
+--     end                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+From                 
+
+ kpmglink..assignment As asgn                
+
+ Inner Join kpmglink..Assignment_history As asgn_hist                
+
+  on asgn.assignment_id = asgn_hist.assignment_id                
+
+ Inner Join kpmglink..Business_place As HstBusPlace                 
+
+  on Asgn.Host_business_place_id = HstBusPlace.Business_place_id                
+
+ Inner Join kpmglink..Place  As HstCity                
+
+  On HstBusPlace.City_Place_id = HstCity.Place_id                
+
+ Inner Join kpmglink..Place As HstCtry                 
+
+  On HstCity.Parent_Place_id = HstCtry.Place_id                 
+
+ Inner Join kpmglink..Business_place As HomeBusPlace                 
+
+  on  Asgn.Home_business_place_id = HomeBusPlace.Business_place_id                 
+
+ Inner Join kpmglink..Place As HmCity               On HomeBusPlace.City_Place_id =HmCity.Place_id                 
+
+ Inner Join kpmglink..Place As Hmctry                
+
+  On HmCity.Parent_Place_id = Hmctry.Place_id                
+
+ Inner Join kpmglink..person As prsn                
+
+  on prsn.person_id = asgn.expatriate_person_id                
+
+ /*left Join kpmglink..assignment_payroll_info As prinf                
+
+  on prinf.assignment_id = asgn.assignment_id                
+
+ left Join kpmglink..payroll_number As prnum                
+
+  on prnum.payroll_number_id = prinf.host_payroll_number_id */                
+
+ Inner Join Link_GE..ASSIGNMENT_HISTORY_VW asgn_hist_host                
+
+on asgn.assignment_id = asgn_hist_host.assignment_id                
+
+ Inner join  kpmglink..Payroll HostPay                
+
+        on HostPay.payroll_id = asgn_hist_host.value                
+
+                and  asgn_hist_host.field_name = 'Host Payroll Group'                
+
+ Inner Join Link_GE..ASSIGNMENT_HISTORY_VW asgn_hist_home                
+
+                on asgn.assignment_id = asgn_hist_home.assignment_id                
+
+ Inner join  kpmglink..Payroll HomePay                
+
+        on HomePay.payroll_id = asgn_hist_home.value                
+
+                and  asgn_hist_home.field_name = 'Home Payroll Group'                
+
+-- SC # 29506777 - Remove formtemp tables from all stored procedures - Prakash Jattani 4/Sep/2009 start    
+
+/*    
+
+ left Join Link_Ge..formtemp_assignment As f                
+
+  on asgn.assignment_id = f.link_assignment_id                
+
+ left Join Link_Ge..formtemp_lookup_field As lkf                
+
+  on lkf.recordid = f.recordid                
+
+  and lkf.field_id = 1                
+
+ left Join Link_Ge..formtemp_lookup As lk                
+
+  on lk.lookup_id = lkf.LOOKUP_ID                
+
+*/    
+
+-- SC # 29506777 - Remove formtemp tables from all stored procedures - Prakash Jattani 4/Sep/2009 end    
+
+/*56429 Start*/                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- left Join Link_Ge..tbl_peoplesoft_xref As xrefssn                
+
+--  on xrefssn.national_id = prsn.social_insurance_code                
+
+-- left Join Link_Ge..tbl_peoplesoft_xref As xrefname                
+
+--  on xrefname.first_Name = prsn.first_Name                
+
+--  and xrefname.last_Name = prsn.last_Name                
+
+--  and xrefname.birth_date = prsn.birth_date                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+/*56429 End*/                
+
+ where                 
+
+  asgn_hist.field_name = 'Assignment_activate_date'                 
+
+  --and convert(datetime,asgn_hist.value) between dateadd(dd,-1000,getdate()) and getdate()                
+
+  and convert(datetime,asgn_hist.value) between @m_DtFromDate and @m_DtToDate                 
+
+  --and convert(datetime,asgn_hist.value) between '09/01/2004' and '09/31/2004'                
+
+                
+
+/* DELETE*/             
+
+---------PMPR change scenario--------------------------------------------------              
+
+/*--#1558814 new scenario PMPR change Create the PMPR change temporary table (#tempPMPRchange) for storing all the PMPR change assignments.*/                                        
+
+Create Table #tempPMPRchange                                        
+
+(                                        
+
+ assignment_id int,                                        
+
+ person_id int,                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- emplid char(11),                                        
+
+-- aquisition_flag char(1),                                        
+
+-- newhire char(1),                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ home_country int,                                        
+
+ host_country int,                                        
+
+ marital_status_code varchar(24),                     
+
+ host_pmpr varchar(24),                                        
+
+ home_pmpr varchar(24),                        
+
+ scenario_id int,                                        
+
+ activation_date datetime,                                        
+
+ actual_start_date datetime,                                        
+
+ comp_pmpr varchar(24),                                        
+
+ deactivation_date datetime,                                        
+
+ IW_Removal_Reason varchar(255),                                        
+
+ action char(3),                                        
+
+ action_reason char(3),                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                            
+
+-- salary_amount float,               
+
+salary_amount float  
+
+-- peoplesoft_empl_status char(1)                            
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+)                                        
+
+              
+
+EXECUTE stp_peoplesoft_feed_find_PMPRchange  @m_DtFromDate, @m_DtToDate                 
+
+          
+
+          
+
+insert into #tempMainActivation                          
+
+(assignment_id,                                        
+
+ person_id,                                        
+
+ --emplid,     
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                                     
+
+-- aquisition_flag,                                        
+
+-- newhire,                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ home_country,                                        
+
+ host_country,                                        
+
+ marital_status_code,                 
+
+ host_pmpr,               
+
+ home_pmpr,                                        
+
+ scenario_id,                                        
+
+ activation_date,                                        
+
+ actual_start_date,                                        
+
+ comp_pmpr,                                        
+
+ deactivation_date,                       
+
+IW_Removal_Reason,                                        
+
+ action,               
+
+ action_reason,                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                                         
+
+-- salary_amount,  
+
+ salary_amount)  
+
+-- peoplesoft_empl_status)                                      
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+Select                                         
+
+ assignment_id ,                                        
+
+ person_id,                       
+
+-- emplid ,                                  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start  
+
+-- aquisition_flag ,                                        
+
+-- newhire ,                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ home_country ,                                        
+
+ host_country ,                                        
+
+ marital_status_code ,                                        
+
+ host_pmpr ,                                        
+
+ home_pmpr ,                                        
+
+ scenario_id ,                    
+
+ activation_date ,                                        
+
+ actual_start_date ,                                        
+
+ comp_pmpr ,                                        
+
+ deactivation_date ,                                        
+
+ IW_Removal_Reason ,                                        
+
+ action ,                                        
+
+ action_reason,                                        
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                                    
+
+-- salary_amount,      
+
+ salary_amount      
+
+-- peoplesoft_empl_status                     
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+from #tempPMPRchange           
+
+--#1558814 new scenario PMPR change complete            
+
+-------------------------------------------------------------------------------                               
+
+                
+
+/* The temporary table of data for GME's for whom Tax Details are needed to be sent to peoplesoft*/                
+
+--drop table #tempTaxData                
+
+Create Table #tempTaxData                
+
+(                
+
+ assignment_id int,          
+
+ person_id int,          
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+-- soc_sec_no char(9),                
+
+  SSO char(9),   
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+ company char(3),                
+
+ marital_status_code varchar(24),                
+
+ actual_start_date datetime,                
+
+ expat_loc varchar(4),                
+
+ HOST_FEDERAL_TAX_STATUS char(1),                
+
+ HOME_FEDERAL_TAX_STATUS char(1),                
+
+ HOST_STATE_TAX_STATUS char(1),                
+
+ HOME_STATE_TAX_STATUS char(1),                
+
+ federal_special_status char(1),                
+
+ state_special_status char(1),                
+
+ withholding_allowances int,                
+
+ home_work_state int,                
+
+ home_residence_state int,                
+
+ host_work_state int,                
+
+ host_residence_state int,                
+
+ State_GEIS varchar(10),                
+
+ State_resident char(1),                
+
+ pk int identity                
+
+)                
+
+                
+
+                
+
+                
+
+/* Big Query Below - Get all the raw data for Federal And State Records                 
+
+   Take the data for only US inbounds and US outbounds - as tax records are only for US inbound/outbound                
+
+   add_processp01..pmpr_codes has to be modified to include the company codes                 
+
+ drop table #tempTaxData                
+
+*/                
+
+ insert into #tempTaxData                
+
+ Select                 
+
+  t.assignment_id,                
+
+  t.person_id,                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no = 
+
+--  case when charindex('-', prsn.social_insurance_code) <> 0 then                 
+
+--   ltrim(rtrim(substring(prsn.social_insurance_code,1,3) + substring(prsn.social_insurance_code,5,2) + right(prsn.social_insurance_code,4)))                
+
+--  else                
+
+--  ltrim(rtrim(prsn.social_insurance_code))                
+
+--  end,                
+
+ SSO =  ltrim(rtrim(prsn.hr_code)),                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+  company =                 
+
+  case when adphome.pmpr_code is not null then                 
+
+   --RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - START --  
+
+   --adphome.company                 
+
+   (SELECT DISTINCT PMPR_VALUE FROM #temp_pmpr WHERE PMPR_VALUE_TYPE = 'company' and adphome.pmpr_code_id = PMPR_CODE_ID)
+
+  else                 
+
+   --adphost.company                
+
+   (SELECT DISTINCT PMPR_VALUE FROM #temp_pmpr WHERE PMPR_VALUE_TYPE = 'company' and adphost.pmpr_code_id = PMPR_CODE_ID)
+
+    --RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - END --  
+
+  end,                    
+
+  marital_status_code = case when t.marital_status_code is null or t.marital_status_code = '' then 'S' else t.marital_status_code end,                
+
+  t.actual_start_date,                
+
+  expat_loc = case when adphome.pmpr_code is not null then 'home'                
+
+       else 'host'                
+
+       end,                
+
+  HOST_FEDERAL_TAX_STATUS =                 
+
+   (select asgnhist1.value from kpmglink..assignment_history asgnhist1                
+
+    where asgnhist1.field_name = 'HOST FEDERAL TAX STATUS'                 
+
+    and asgnhist1.assignment_id = t.assignment_id                
+
+    and asgnhist1.Created_Date =                 
+
+     (select max(Created_Date) from kpmglink..assignment_history assign2 where                 
+
+     assign2.assignment_id = asgnhist1.assignment_id                
+
+     and assign2.field_name = 'HOST FEDERAL TAX STATUS'                
+
+      and effective_date =                
+
+      (select max(effective_date) from kpmglink..assignment_history assign3                
+
+      where assign3.assignment_id=assign2.assignment_id                
+
+        and assign3.field_name = 'HOST FEDERAL TAX STATUS')                
+
+     )               
+
+   ),                     
+
+  HOME_FEDERAL_TAX_STATUS = (select asgnhist1.value from kpmglink..assignment_history asgnhist1                
+
+    where asgnhist1.field_name = 'HOME FEDERAL TAX STATUS'                 
+
+    and asgnhist1.assignment_id = t.assignment_id                
+
+    and asgnhist1.Created_Date =                 
+
+     (select max(Created_Date) from kpmglink..assignment_history assign2 where                 
+
+     assign2.assignment_id = asgnhist1.assignment_id                
+
+     and assign2.field_name = 'HOME FEDERAL TAX STATUS'                
+
+      and effective_date =                
+
+      (select max(effective_date) from kpmglink..assignment_history assign3                
+
+      where assign3.assignment_id=assign2.assignment_id                
+
+        and assign3.field_name = 'HOME FEDERAL TAX STATUS')                
+
+     )                
+
+   ),                       
+
+  HOST_STATE_TAX_STATUS = (select asgnhist1.value from kpmglink..assignment_history asgnhist1                
+
+    where asgnhist1.field_name = 'HOST STATE TAX STATUS'                 
+
+    and asgnhist1.assignment_id = t.assignment_id                
+
+    and asgnhist1.Created_Date =                 
+
+     (select max(Created_Date) from kpmglink..assignment_history assign2 where                 
+
+     assign2.assignment_id = asgnhist1.assignment_id                
+
+     and assign2.field_name = 'HOST STATE TAX STATUS'                
+
+      and effective_date =                
+
+      (select max(effective_date) from kpmglink..assignment_history assign3                
+
+   where assign3.assignment_id=assign2.assignment_id                
+
+        and assign3.field_name = 'HOST STATE TAX STATUS')                
+
+     )                
+
+   ),                
+
+  HOME_STATE_TAX_STATUS = (select asgnhist1.value from kpmglink..assignment_history asgnhist1                
+
+    where asgnhist1.field_name = 'HOME STATE TAX STATUS'                 
+
+    and asgnhist1.assignment_id = t.assignment_id                
+
+    and asgnhist1.Created_Date =    
+
+     (select max(Created_Date) from kpmglink..assignment_history assign2 where                 
+
+     assign2.assignment_id = asgnhist1.assignment_id                
+
+     and assign2.field_name = 'HOME STATE TAX STATUS'                
+
+      and effective_date =                
+
+      (select max(effective_date) from kpmglink..assignment_history assign3                
+
+      where assign3.assignment_id=assign2.assignment_id                
+
+        and assign3.field_name = 'HOME STATE TAX STATUS')                
+
+     )                
+
+   ),                  
+
+  withholding_allowances = null,                
+
+  federal_special_status = space(1),                
+
+  state_special_status = space(1),                
+
+  home_work_state = null, -- to be updated in a seperate update query                 
+
+  home_residence_state = null,                
+
+  host_work_state = null,                
+
+  host_residence_state = null,                
+
+  State_GEIS = null,                
+
+  state_resident = null                  
+
+ from #tempMainActivation t                
+
+ inner join kpmglink..person prsn                
+
+  on prsn.person_id = t.person_id                
+
+  --RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - START --     
+
+ --left join add_processp01..pmpr_codes adphome                 
+
+ left join link_ge..pmpr_codes adphome                 
+
+  on adphome.pmpr_code = t.home_pmpr                
+
+  and adphome.country_code = 'US'                
+
+ --left join add_processp01..pmpr_codes adphost                
+
+ left join link_ge..pmpr_codes adphost                
+
+  on adphost.pmpr_code = t.host_pmpr                 
+
+  and adphost.country_code = 'US'                
+
+  --RITM13569874 - Changes to remove PMPR Hardcodings - February 2017 - END --     
+
+  --Only us inbounds or outbounds are to be considered                
+
+ where  (adphome.pmpr_code is not null                 
+
+  or           
+
+  adphost.pmpr_code is not null)                
+
+                
+
+                
+
+-- select * from #tempMainActivation                
+
+/*Determine and remove the transfers */                
+
+                
+
+ select b.expatriate_person_id, b.assignment_id , b.actual_start_date                
+
+ into #temp1                
+
+ from kpmglink..assignment b                
+
+ where b.actual_start_date in                 
+
+  (select max(a.actual_start_date) from kpmglink..assignment a where a.asgn_stat_code='A'                
+
+ group by a.expatriate_person_id                 
+
+ having a.expatriate_person_id= b.expatriate_person_id)                
+
+                  
+
+ select b.expatriate_person_id, b.assignment_id , b.actual_end_date, b.actual_start_date                
+
+ into #temp2                
+
+ from kpmglink..assignment b                 
+
+ where b.actual_end_date in            
+
+ (select max(a.actual_end_date) from kpmglink..assignment a                 
+
+  where a.asgn_stat_code='I' group by a.expatriate_person_id                 
+
+  having a.expatriate_person_id= b.expatriate_person_id)                
+
+                
+
+ select #temp1.expatriate_person_id,#temp1.actual_start_date,#temp2.actual_end_date                 
+
+ into #temp3 from #temp1,#temp2                 
+
+ where #temp1.expatriate_person_id=#temp2.expatriate_person_id                 
+
+ and datediff(day,#temp2.actual_end_date,#temp1.actual_start_date)=1                
+
+          
+
+--#1558814 new scenario PMPR change Create to avoid deleting change PMPR records                 
+
+-- delete from #tempTaxData where #tempTaxData.person_id in (select expatriate_person_id from #temp3)                
+
+ delete from #tempTaxData where #tempTaxData.person_id in           
+
+(select expatriate_person_id from #temp3 where expatriate_person_id not in          
+
+(select person_id from #tempPMPRchange))          
+
+          
+
+update #tempTaxData          
+
+set actual_start_date =           
+
+ Convert(Datetime,(LTRIM(RTRIM(STR(year(getdate())))) + '-' +          
+
+    case                   
+
+ when LTRIM(RTRIM(STR(month(getdate())))) < 10 then '0'+LTRIM(RTRIM(STR(month(getdate()))))          
+
+    else LTRIM(RTRIM(STR(month(getdate()))))          
+
+ end + '-' + '01'))          
+
+where person_id in (select person_id from #tempPMPRchange)            
+
+--#1558814 new scenario PMPR change complete          
+
+                
+
+/*Assign the number of the dependent persons*/                
+
+ Select                
+
+ Tax.Person_ID,                  
+
+  'Dep' =                 
+
+  sum (                
+
+  (case when ((Rel.taxable_from_date <=  Tax.Actual_start_date) and                 
+
+  ((Rel.taxable_to_date > Tax.Actual_start_date) or (Rel.taxable_to_date is null))) then                
+
+   1                
+
+ else                 
+
+   0                  
+
+ end)                
+
+ )                 
+
+ into #temptaxdep                 
+
+ from                 
+
+ #tempTaxData Tax                
+
+ inner join kpmglink..Person_Relation Rel                
+
+ on Rel.Expatriate_Person_id = Tax.Person_id                
+
+ group by Tax.Person_ID                
+
+                  
+
+                
+
+ Update #tempTaxData                 
+
+ set withholding_Allowances = case when D.Dep is null then 1 else D.dep + 1 end       
+
+ from #tempTaxData Tax                
+
+ left join  #temptaxdep D                
+
+ on d.person_id = Tax.Person_id                
+
+/*Assign the special Status and withholdin allowances*/                
+
+                
+
+ update #tempTaxData                
+
+  set federal_special_status =                  
+
+    case                 when (expat_loc='home') then                 
+
+   case                 
+
+      when HOME_FEDERAL_TAX_STATUS ='W' then 'G'                 
+
+                 when HOME_FEDERAL_TAX_STATUS='A' then 'N'                
+
+         when HOME_FEDERAL_TAX_STATUS='N' then 'E'                
+
+   end                 
+
+    when (expat_loc='host') then                 
+
+   case                 
+
+      when HOST_FEDERAL_TAX_STATUS ='W' then 'G'                 
+
+                         when HOST_FEDERAL_TAX_STATUS='A' then 'N'                
+
+         when HOST_FEDERAL_TAX_STATUS='N' then 'E'                
+
+   end                 
+
+    end,                
+
+  state_special_status =                 
+
+    case                 
+
+    when (expat_loc='home') then                 
+
+   case                 
+
+      when HOME_STATE_TAX_STATUS ='W' then 'G'                 
+
+                         when HOME_STATE_TAX_STATUS='A' then 'N'                
+
+         when HOME_STATE_TAX_STATUS='N' then 'E'                
+
+   end                 
+
+    when (expat_loc='host') then                 
+
+   case                 
+
+      when HOST_STATE_TAX_STATUS ='W' then 'G'                 
+
+                         when HOST_STATE_TAX_STATUS='A' then 'N'                
+
+         when HOST_STATE_TAX_STATUS='N' then 'E'                
+
+   end                 
+
+    end                
+
+                
+
+/*Assign the number of withholding allowances - if special_status is not G or N then blank else number of deendendents.*/                
+
+/*Prasad - Commented as withholding allwances are to be calcularted based on respective tax statuses.*/                
+
+/*                
+
+ update #tempTaxData                
+
+  set withholding_allowances =                 
+
+   Case when federal_special_status in ('G','N') then                
+
+    withholding_allowances                
+
+   else                  
+
+    space(1)                
+
+   end                
+
+*/                
+
+                   
+
+--select * from #tempTaxData                
+
+/*Calculate GEIS code and state_resident flag -- required for the state records - total two queries used to achieve this.*/                
+
+         --#1                
+
+ update #tempTaxData                
+
+  set home_work_state = asgnhHW.value,                
+
+  home_residence_state = asgnhHR.value,                
+
+  host_work_state = asgnhHSW.value,                
+
+  host_residence_state = asgnhHSR.value                
+
+ from #tempTaxData Tax                
+
+ left join kpmglink..assignment_history asgnhHW                
+
+  on asgnhHW.assignment_id = Tax.assignment_id                 
+
+  and asgnhHW.field_name = 'HOME WORK STATE'                
+
+  and asgnhHW.Created_Date =                 
+
+   (Select max(Created_Date) from kpmglink..assignment_history asgnh1         
+
+    where asgnh1.assignment_id = asgnhHW.assignment_id                
+
+    and asgnh1.field_name = asgnhHW.field_name                
+
+    and asgnh1.effective_date = (Select max(effective_date) from kpmglink..assignment_history asgnh2                 
+
+        where asgnh1.assignment_id = asgnh2.assignment_id                
+
+        and asgnh1.field_name = asgnh2.field_name                
+
+            )                 
+
+   )                  
+
+ left join kpmglink..assignment_history asgnhHR                
+
+  on asgnhHR.assignment_id = Tax.assignment_id                 
+
+  and asgnhHR.field_name = 'HOME RESIDENT STATE'                
+
+  and asgnhHR.Created_Date =                 
+
+   (Select max(Created_Date) from kpmglink..assignment_history asgnh3                 
+
+    where asgnh3.assignment_id = asgnhHR.assignment_id                
+
+    and asgnh3.field_name = asgnhHR.field_name                
+
+    and asgnh3.effective_date = (Select max(effective_date) from kpmglink..assignment_history asgnh4                
+
+        where asgnh3.assignment_id = asgnh4.assignment_id                
+
+        and asgnh3.field_name = asgnh4.field_name                
+
+            )                 
+
+   )                  
+
+                
+
+ left join kpmglink..assignment_history asgnhHSR                
+
+  on asgnhHSR.assignment_id = Tax.assignment_id                 
+
+  and asgnhHSR.field_name = 'HOST RESIDENT STATE'         
+
+  and asgnhHSR.Created_Date =                 
+
+   (Select max(Created_Date) from kpmglink..assignment_history asgnh5                 
+
+    where asgnh5.assignment_id = asgnhHSR.assignment_id                
+
+    and asgnh5.field_name = asgnhHSR.field_name                
+
+    and asgnh5.effective_date = (Select max(effective_date) from kpmglink..assignment_history asgnh6                
+
+        where asgnh5.assignment_id = asgnh6.assignment_id                
+
+        and asgnh5.field_name = asgnh6.field_name                
+
+            )                 
+
+   )                  
+
+                
+
+ left join kpmglink..assignment_history asgnhHSW                
+
+  on asgnhHSW.assignment_id = Tax.assignment_id                 
+
+  and asgnhHSW.field_name = 'HOST RESIDENT STATE'                
+
+  and asgnhHSW.Created_Date =                 
+
+   (Select max(Created_Date) from kpmglink..assignment_history asgnh7                 
+
+    where asgnh7.assignment_id = asgnhHSW.assignment_id                
+
+    and asgnh7.field_name = asgnhHSW.field_name                
+
+    and asgnh7.effective_date = (Select max(effective_date) from kpmglink..assignment_history asgnh8                
+
+        where asgnh7.assignment_id = asgnh8.assignment_id                
+
+        and asgnh7.field_name = asgnh8.field_name                
+
+            )                 
+
+   )                  
+
+ --#2                
+
+                  
+
+ update #tempTaxData                
+
+ set state_resident =                 
+
+  case when expat_loc = 'Home' then                
+
+   case when home_work_state is null or home_residence_state is null then                
+
+    'Y'                
+
+   when home_work_state = home_residence_state then                
+
+    'Y'                
+
+        else                   
+
+    'N'                
+
+   end                
+
+  else                 
+
+   case when host_work_state is null or host_residence_state is null then                
+
+    'Y'                
+
+   when host_work_state = host_residence_state then                
+
+    'Y'               
+
+        else                   
+
+    'N'                
+
+   end                
+
+                   
+
+  end,                
+
+  State_GEIS = CS.State_Code                
+
+ from #tempTaxData Tax                
+
+ inner join Link_Ge..cpars_state_codes CS                
+
+ on CS.link_state_id = case when expat_loc = 'home' then                 
+
+       case when home_work_state is not null then                 
+
+        home_work_state                
+
+       else                 
+
+     home_residence_state                
+
+       end                
+
+         else                
+
+       case when host_work_state is not null then                 
+
+        host_work_state                
+
+       else                 
+
+     host_residence_state      
+
+       end                 
+
+         end                 
+
+                
+
+-- select * from #tempTaxData                
+
+ Delete from Link_GE..tbl_peoplesoft_feed_tax                
+
+                
+
+-- select * from #temptaxdata where state_geis is null                
+
+/*Insert Federal Tax records*/                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,        
+
+ SSO,          
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  EFFDT,                
+
+  COMPANY,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  WITHHOLDING_ALLOWANCES                 
+
+ )                
+
+ select                 
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+  Upper(replace(convert(varchar(11),actual_start_date,113),' ','-')),                
+
+  company,                
+
+  federal_special_status,                 
+
+  marital_status_code,              
+
+  withholding_allowances =                 
+
+   Case when federal_special_status in ('G','N') then                
+
+    replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances)))                
+
+   else                  
+
+    space(3)                
+
+   end                
+
+ from                 
+
+ #tempTaxData                
+
+                
+
+                
+
+/*Insert State Tax Records*/                
+
+                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+  EFFDT,                  
+
+  COMPANY,                
+
+  GEIS,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  state_resident,                 
+
+  WITHHOLDING_ALLOWANCES                
+
+ )                
+
+ select                 
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end  
+
+  Upper(replace(convert(varchar(11),actual_start_date,113),' ','-')),                
+
+  company,                
+
+  State_GEIS + replicate('0',8),                
+
+  State_special_status,                 
+
+  marital_status_code,                
+
+  state_resident,                
+
+  withholding_allowances =                 
+
+   Case when State_special_status in ('G','N') then                
+
+    replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances)))                
+
+   else                  
+
+    space(3)                
+
+   end                
+
+ from                 
+
+ #tempTaxData                
+
+/*Find out the latest worksheets for the all activated assignments(Assignments for the table above)*/                
+
+                
+
+ --Get all worksheets                 
+
+ Select                
+
+  tmpasgn.Assignment_id,                
+
+  tmpasgn.person_id,                 
+
+  Max(Wrsh.Effective_date) 'MaxOfEFFECTIVE_DATE'                
+
+ Into                 
+
+  #tempworksheet                
+
+ From                 
+
+  #tempTaxData as tmpasgn                
+
+  Inner Join kpmglink..Compensation_Package As Cmpkg  
+
+   On tmpAsgn.Assignment_id = Cmpkg.Assignment_id                
+
+  Inner Join kpmglink..Worksheet As Wrsh                
+
+   On Wrsh.Comp_pkg_id = Cmpkg.Comp_pkg_id                
+
+ Where                 
+
+  (Wrsh.Status ='F')                 
+
+  And (Wrsh.Comment_ Not Like '%De-Acti%' Or Wrsh.Comment_ Is Null)                
+
+ Group By                
+
+  tmpasgn.Assignment_id ,                
+
+  tmpasgn.person_id                
+
+                
+
+ --get the latest worksheet                 
+
+ Select                
+
+  tmpwrksh.Assignment_id,                
+
+  tmpwrksh.person_id,                 
+
+  Max(Wrsh.Worksheet_id) 'worksheet_id'                
+
+ Into                 
+
+  #templatestworksheet                
+
+ From                 
+
+  #tempworksheet as tmpwrksh                
+
+  Inner Join kpmglink..Compensation_Package As Cmpkg                 
+
+   On tmpwrksh.Assignment_id = Cmpkg.Assignment_id                
+
+  Inner Join kpmglink..Worksheet As Wrsh                
+
+   On Wrsh.Comp_pkg_id = Cmpkg.Comp_pkg_id                
+
+   and tmpwrksh.MaxOfEFFECTIVE_DATE = wrsh.effective_date                
+
+ Where                 
+
+  (Wrsh.Status ='F')                 
+
+  And (Wrsh.Comment_ Not Like '%De-Acti%' Or Wrsh.Comment_ Is Null)                
+
+ Group By                
+
+  tmpwrksh.Assignment_id ,                
+
+  tmpwrksh.person_id                
+
+                
+
+ --Get the allowance id for the city tax and county tax identified by table - auto_Tax_Record_Type               
+
+ -- If there are multiple records for either city or county - all should be picked up here. 
+
+ select                 
+
+  Tax.*,                
+
+  tmpwrk.worksheet_id,                
+
+  wrkshlicity.allowance_id as 'City_Allowance_ID',                
+
+  wrkshlicounty.allowance_id as 'County_Allowance_ID',                
+
+  cparsCity.STATE_CODE + cparsCity.CITY_CODE + cparsCity.Country_CODE as GEIS_City,                
+
+  cparsCounty.STATE_CODE + cparsCounty.CITY_CODE + cparsCity.Country_CODE as GEIS_County                 
+
+ into #tempTaxCityCounty                
+
+ from                  
+
+  #tempTaxData as Tax                
+
+  left join #templatestworksheet AS tmpwrk                
+
+   on tmpwrk.assignment_id = tax.assignment_id                
+
+  left join kpmglink..worksheet_line_item as wrkshlicounty                
+
+   on wrkshlicounty.worksheet_id = tmpwrk.worksheet_id                
+
+   and wrkshlicounty.allowance_id in                 
+
+      (select Allowance_Id                 
+
+       from Link_Ge..auto_Tax_Record_Type                 
+
+       where Record_Type = 'K')                
+
+  left join kpmglink..worksheet_line_item as wrkshlicity                
+
+   on wrkshlicity.worksheet_id = tmpwrk.worksheet_id                
+
+   and wrkshlicity.allowance_id in                 
+
+      (select Allowance_Id                 
+
+       from Link_Ge..auto_Tax_Record_Type                 
+
+       where Record_Type = 'C')                
+
+  left join Link_Ge..cpars_state_codes cparsCity                
+
+   on cparscity.link_state_id = wrkshlicity.allowance_id                
+
+  left join Link_Ge..cpars_state_codes cparsCounty                
+
+   on cparsCounty.link_state_id = wrkshlicounty.allowance_id                
+
+                   
+
+ order by                
+
+  tmpwrk.assignment_id                  
+
+ --select * from Link_Ge..cpars_state_codes                 
+
+/*Create the City record for all assignments for which worksheet is available*/                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,                
+
+SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  EFFDT,                
+
+  COMPANY,                
+
+  GEIS,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  WITHHOLDING_ALLOWANCES,                
+
+  locality_treatment                 
+
+ )                
+
+ select   
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  Upper(replace(convert(varchar(11),actual_start_date,113),' ','-')),                
+
+  company,                
+
+  GEIS_city,                
+
+  'G', -- The special status for all the allowances from worksheet should be 'G' = "Per Worksheet"                 
+
+  marital_status_code,                
+
+  replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances))), -- withholding allowances should always be number of dependents as the ststus is G                 
+
+  'A'                 
+
+ from                 
+
+ #tempTaxCityCounty                
+
+ where City_Allowance_ID is not null -- this where clause ensures that only those asignments have a worksheet allowance will be picked up here.                
+
+  and State_GEIS is not null                
+
+                
+
+                
+
+/*Create the County record for all the assignments for which worksheet is is available*/                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  EFFDT,                
+
+  COMPANY,                
+
+  GEIS,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  WITHHOLDING_ALLOWANCES,                
+
+  locality_treatment               
+
+ )           
+
+ select               
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  Upper(replace(convert(varchar(11),actual_start_date,113),' ','-')),                
+
+  company,                
+
+  GEIS_County,                
+
+  'G', -- The special status for all the allowances from worksheet should be 'G' = "Per Worksheet"                 
+
+  marital_status_code,                
+
+  replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances))), -- withholding allowances should always be number of dependents as the ststus is G                 
+
+  'A'                 
+
+ from                 
+
+ #tempTaxCityCounty                
+
+ where County_Allowance_ID is not null                 
+
+  and State_GEIS is not null                
+
+                
+
+/*If the TAX screen has a locality with residency as 'Active' or 'None'                 
+
+- it needs to be captured in this file.*/                
+
+                
+
+ select  Tax.*,                
+
+  asgnT.home_local_municip as 'Home_Locality',                
+
+  asgnT.HOME_LOCAL_RESIDENCY as 'Home_Residency',                
+
+  asgnT.host_local_municip as 'Host_Locality',                
+
+  asgnT.HOST_LOCAL_RESIDENCY as 'Host_Residency',                
+
+  worklocHm.cpars_work_loc_code as 'Locality_Home_GEIS',                
+
+  worklocHs.cpars_work_loc_code as 'Locality_Host_GEIS'                
+
+ into #tempTaxLocality                
+
+ from #tempTaxData Tax                
+
+ left join kpmglink..assignment_tax_info asgnT                
+
+  on Tax.Assignment_id = asgnT.assignment_id                
+
+  and asgnT.assignment_tax_id = (select max(ASSIGNMENT_TAX_ID) from kpmglink..assignment_tax_info                 
+
+      where assignment_id = asgnT.assignment_id)                
+
+ left join add_processp01..cpars_work_loc_code worklocHm                
+
+  on worklocHm.city = asgnT.home_local_municip                
+
+ left join add_processp01..cpars_work_loc_code worklocHs                
+
+  on worklocHs.city = asgnT.host_local_municip                
+
+                
+
+--select * from #tempTaxLocality                
+
+--select * from kpmglink..assignment_tax_info where assignment_id = 16574                
+
+                
+
+                
+
+/*Insert the records for all home localities from the tax screen - only if the residency is active or inactive.*/                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  EFFDT,                
+
+  COMPANY,                
+
+  GEIS,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  WITHHOLDING_ALLOWANCES,                
+
+  locality_treatment                 
+
+ )                
+
+ select                 
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  Upper(replace(convert(varchar(11),actual_start_date,113),' ','-')),                
+
+  company,                
+
+  Locality_Home_GEIS,                
+
+  case when Home_Residency = 'Active' then 'N' else 'E' end, -- Active = N and None = E                  
+
+  marital_status_code,                
+
+  case when Home_Residency = 'Active' then                 
+
+    replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances)))                 
+
+   else                 
+
+    space(3)                
+
+   end,                
+
+  'A'                 
+
+ from                 
+
+  #tempTaxLocality                
+
+ where Locality_Home_GEIS is not null                 
+
+  and State_GEIS is not null                
+
+  and Home_Residency <> 'Per Worksheet'                
+
+                
+
+/*Insert the records for all host localities from the tax screen - only if the residency is active or inactive.*/                
+
+ Insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ (                
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start        
+
+--  SSN,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  EFFDT,                
+
+  COMPANY,                
+
+  GEIS,                
+
+  SPECIAL_STATUS,                
+
+  MAR_STATUS,                
+
+  WITHHOLDING_ALLOWANCES,                
+
+  locality_treatment                 
+
+ )                
+
+ select       
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - start                  
+
+--  soc_sec_no,                
+
+ SSO,  
+
+-- GBS #: 45219615 - SSN to SSO in tax data file - end        
+
+  Upper(replace(convert(varchar(11),actual_start_date,101),' ','-')),                
+
+  company,                
+
+  Locality_Host_GEIS,                
+
+  case when Host_Residency = 'Active' then 'N' else 'E' end, -- Active = N and None = E                  
+
+  marital_status_code,                
+
+  case when Host_Residency = 'Active' then                 
+
+    replicate('0',3-len(ltrim(rtrim(str(withholding_allowances))))) + ltrim(rtrim(str(withholding_allowances)))                 
+
+   else                 
+
+    space(3)                
+
+   end,                
+
+  'A'                 
+
+ from               
+
+  #tempTaxLocality                
+
+ where Locality_Host_GEIS is not null       
+
+  and State_GEIS is not null                
+
+  and Host_Residency <> 'Per Worksheet'       
+
+  
+
+--Send Marital Status as 'X' for records with special status as 'G' - 30 July 2014 -  start
+
+--Records fail at PeS end when we send actual marital status of GME's whose tax setup is "Worksheet(G)". 
+
+--So we start sending 'X' in marital status field only for State/Locality records for GME's whose tax setup is "Worksheet".
+
+update 
+
+	Link_GE..tbl_peoplesoft_feed_tax
+
+set 
+
+	MAR_STATUS = 'X' 
+
+where 
+
+	SPECIAL_STATUS = 'G'
+
+	and GEIS is NOT NULL
+
+--Send Marital Status as 'X' for records with special status as 'G' - 30 July 2014 -  end
+
+                       
+
+                
+
+ /*Order the output by Federal, Tax and local records respectively*/                
+
+ select * into #tbl_peoplesoft_feed_tax from Link_GE..tbl_peoplesoft_feed_tax                
+
+         
+
+ delete from Link_GE..tbl_peoplesoft_feed_tax                
+
+                 
+
+ insert into Link_GE..tbl_peoplesoft_feed_tax                
+
+ select * from #tbl_peoplesoft_feed_tax                
+
+ order by right(GEIS, 8), left(GEIS, 2)                
+
+                
+
+                
+
+drop table #tempMainActivation                
+
+drop table #tempTaxCityCounty                
+
+drop table #tempTaxData                
+
+drop table #templatestworksheet                
+
+drop table #tempworksheet                
+
+drop table #temptaxdep                 
+
+drop table #tempTaxLocality                
+
+drop table #temp1                
+
+drop table #temp2                
+
+drop table #temp3                
+
+drop table #tempPMPRchange          
+
+----------------------------------------------------------------------------------------------------------            
+
+/*BJM Start */                                              
+
+ select @rowcnt = count(1) from Link_ge..tbl_peoplesoft_feed_tax                             
+
+ Exec stp_bjm_update_job_history_master 11,@rowcnt,'Success', 'U', 1                       
+
+END TRY                
+
+BEGIN CATCH                
+
+  Exec stp_bjm_update_job_history_master 11,0,'Failure', 'U', 1          
+
+END CATCH;                  
+
+----------------------------------------------------------------------------------------------------------     
+
+
+
+
+
+
+
+
