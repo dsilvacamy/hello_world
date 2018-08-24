@@ -1,0 +1,339 @@
+Dim conDB As ADODB.Connection
+Dim cmd As ADODB.Command
+Dim RsObj As ADODB.Recordset
+Dim fso As New FileSystemObject
+Dim RsObj1 As ADODB.Recordset
+Dim RsObj2 As ADODB.Recordset
+Dim RsObj3 As ADODB.Recordset
+Dim RsObj4 As ADODB.Recordset
+
+
+Dim introw
+Dim intcol, strStartDate, strAssignDate, LastDate, FirsDate
+Dim StrDay, StrMonthName, StrYear, StrMonthNumber, StrPath
+Dim strserver As String
+Dim strDB As String
+Dim strUID As String
+Dim Pwd As String
+Dim strLogFilename As String
+Dim fsLog As New Scripting.FileSystemObject
+Dim txtStream As TextStream
+
+Public Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+Dim drive As String
+
+Const SYNCHRONIZE = &H100000
+Const INFINITE = &HFFFF
+
+Private Declare Function OpenProcess Lib "kernel32" (ByVal dwDesiredAccess As Long, _
+        ByVal bInheritHandle As Long, ByVal dwProcessId As Long) As Long
+        
+Private Declare Function WaitForSingleObject Lib "kernel32" (ByVal hHandle As Long, _
+        ByVal dwMilliseconds As Long) As Long
+        
+Private Declare Function CloseHandle Lib "kernel32" (ByVal Hobject As Long) As Long
+
+Private Declare Function GetPrivateProfileString Lib "kernel32" Alias _
+   "GetPrivateProfileStringA" (ByVal lpApplicationName As String, _
+   ByVal lpKeyName As Any, ByVal lpDefault As String, _
+   ByVal lpReturnedString As String, ByVal nSize As Long, _
+   ByVal lpFileName As String) As Long
+   Function fnReadINI(ByVal Section As String, ByVal Key As String) As String
+    Dim lngIni As String
+    Dim strRetBuff As String
+    strRetBuff = String(255, 0)
+    lngIni = GetPrivateProfileString(Section, Key, "", strRetBuff, Len(strRetBuff), App.Path & "\GMSFinance.ini")
+    fnReadINI = Left(strRetBuff, lngIni)
+End Function
+Private Sub Main()
+'Name of the logfile
+    StrYear = Year(Now)
+    strLogFilename = App.Path & "\" & "CPT.log"
+    
+    'Open Log file
+    fnOpenLog
+    
+    LastDate = DateSerial(Year(DateAdd("m", -1, Now)), Month(DateAdd("m", -1, Now)), 1)
+    FirstDate = DateAdd("d", -1, DateSerial(Year(Now), Month(Now), 1))
+    
+    ActualLastDate = myDate(LastDate)
+    ActualFirstDate = myDate(FirstDate)
+
+    strserver = fnReadINI("Database", "Server")
+    strDB = fnReadINI("Database", "Database")
+    strUID = fnReadINI("Database", "UserID")
+    Pwd = fnReadINI("Database", "Password")
+    
+    On Error GoTo ErrorHandler
+    Set RsObj = New ADODB.Recordset
+    Set RsObj1 = New ADODB.Recordset
+    Set RsObj2 = New ADODB.Recordset
+    Set RsObj3 = New ADODB.Recordset
+    Set RsObj4 = New ADODB.Recordset
+    
+    Set conDB = CreateObject("ADODB.Connection")
+    If conDB.State = 1 Then
+        conDB.Close                                     'if a connection is already open then close it
+        Set conDB = Nothing                             'destroy the older instance
+    End If
+    
+    'strConnStr = "driver={SQL Server};server=CIHCISDDBSQ001.corporate.ge.com,2433;uid=kpmglink;pwd=kpm91ink;database=Link_GE"
+    strConnStr = "Driver={SQL Server};server=" & strserver & ";database=" & strDB & ";uid=" & strUID & ";pwd=" & Pwd
+    conDB.ConnectionTimeout = 3000
+    RsObj1.CursorLocation = adUseServer
+    RsObj2.CursorLocation = adUseServer
+    RsObj3.CursorLocation = adUseServer
+    RsObj4.CursorLocation = adUseServer
+    RsObj.CursorLocation = adUseServer
+    
+    conDB.Open strConnStr
+    
+    Set cmd = New ADODB.Command
+    cmd.ActiveConnection = conDB
+    cmd.CommandType = 1
+    cmd.CommandTimeout = 0
+    
+    
+   ' strSPName1 = "Link_GE..stp_ey_cpt_compbymonth" & " '" & ActualFirstDate & "', '" & ActualLastDate & "'"
+   ' strSPName1 = "exec " & strSPName1
+    
+   ' RsObj1.Open strSPName1, conDB
+    
+    'strSPName2 = "Link_GE..stp_ey_cpt_others_customization" & " '" & ActualFirstDate & "', '" & ActualLastDate & "', '" & 48 & "'"
+    'strSPName2 = "exec " & strSPName2
+    
+    'RsObj2.Open strSPName2, conDB
+    
+    'strSPName3 = "Link_GE..stp_ey_cpt_compbymonth_link_home" & " '" & ActualFirstDate & "', '" & ActualLastDate & "'"
+    'strSPName3 = "exec " & strSPName3
+    
+    'RsObj3.Open strSPName3, conDB, adOpenForwardOnly, adLockReadOnly
+    
+    
+    'strSPName4 = "Link_GE..stp_ey_cpt_compbymonth_xmit" & " '" & ActualFirstDate & "', '" & ActualLasDate & "'"
+    'strSPName4 = "exec " & strSPName4
+    
+    'RsObj4.Open strSPName3, conDB, adOpenForwardOnly, adLockReadOnly
+    
+    'strSPName = "Link_GE..stp_ey_cpt_extract" & " '" & ActualFirstDate & "', '" & ActualLastDate & "'"
+    'strSPName = "exec " & strSPName
+    
+    RsObj.Open strSPName, conDB
+    
+    If Not RsObj.EOF And Not RsObj.BOF Then
+    
+        'Create Excel Report
+        blnAttach = fnCreateExcelReport(RsObj1, "CPT_EY_" & myDate1(LastDate))
+    
+        Call Send_eMail("CPT file has been loaded successfully", "CPT file - Success", "", "", "")
+        
+    Else
+        'Create Excel Report
+        blnAttach = fnCreateExcelReport(RsObj1, "CPT_EY_" & myDate1(LastDate))
+        
+        Call Send_eMail("CPT file loaded successfully with Zero records", "CPT  - Success", "", "", "")
+        
+    End If
+    
+    
+    conDB.Close
+    Set conDB = Nothing
+    
+    'Close Log file
+    fnCloseLog
+    End
+
+ErrorHandler:
+    If Err.Number <> 0 Then
+        fnWriteErrLog Err.Description, Err.Number
+        'Err.Clear
+    End If
+            
+    Call Send_eMail("CPT Report - Failed.<br>Error Description: " & Err.Description, "CPT Report Report - Failed", "", "", "")
+    Err.Clear
+    'Close Log file
+    fnCloseLog
+    
+    If conDB.State = 1 Then
+        conDB.Close                                     'if a connection is already open then close it
+        Set conDB = Nothing                             'destroy the older instance
+    End If
+    
+    End
+End Sub
+'End Function
+
+Function myDate(dt)
+    Dim d, m, y, sep
+    sep = "/"
+    ' right(..) here works as rpad(x,2,"0")
+    d = Right("0" & DatePart("d", dt), 2)
+    m = Right("0" & DatePart("m", dt), 2)
+    y = DatePart("yyyy", dt)
+    myDate = y & sep & m & sep & d
+End Function
+
+ Function myDate1(dt)
+    Dim m, y, sep
+    sep = "-"
+    ' right(..) here works as rpad(x,2,"0")
+    m = Right("0" & DatePart("m", dt), 2)
+    y = DatePart("yyyy", dt)
+    myDate1 = y & sep & m
+End Function
+
+Function fnCreateExcelReport(rs As Recordset, ByVal Name As String) As Boolean
+On Error GoTo Err
+'Create a new workbook in Excel
+   Dim StrFullPath As String
+   Dim oExcel As Object
+   Dim oBook As Object
+   Dim oSheet As Object
+   Set oExcel = CreateObject("Excel.Application")
+   Set oBook = oExcel.Workbooks.Add
+   Set oSheet = oBook.Worksheets(1)
+   'Dim StrPath As String
+   oExcel.DisplayAlerts = False
+   oExcel.Visible = False
+   strNetworkPath = fnReadINI("Network Path", "NPath")
+    
+    With oExcel.ActiveWindow
+        .SplitColumn = 0
+        .SplitRow = 1
+        .FreezePanes = True
+    End With
+   
+    'Get the field names as the second row
+    For iCols = 1 To rs.Fields.Count
+        oSheet.Cells(1, iCols).Value = Replace(UCase(rs.Fields(iCols - 1).Name), "_", " ")
+    Next
+   
+    ' oSheet.Name = "GMS_Finance"
+    oSheet.Activate
+    
+    
+    'Format the excel sheet
+    oSheet.Range(oSheet.Cells(1, 1), oSheet.Cells(1, iCols - 1)).Font.Bold = True
+    oSheet.Range(oSheet.Cells(1, 1), oSheet.Cells(1, iCols - 1)).Interior.Color = RGB(200, 255, 255)
+    oSheet.Rows.AutoFit
+    oSheet.Columns.AutoFit
+    oSheet.Range("C:C").NumberFormat = "d-mmm-yyyy"
+    oSheet.Range("R:R").NumberFormat = "d-mmm-yyyy"
+    oSheet.Range("S:S").NumberFormat = "d-mmm-yyyy"
+    
+    If rs.EOF Then
+        oSheet.Range("A2").Value = "No records found"
+    Else
+        'Transfer the data to Excel
+        oSheet.Range("A2").CopyFromRecordset rs
+    End If
+
+    oBook.SaveAs App.Path & "\" & Name & ".xls"
+
+    oBook.Save
+    oBook.Close
+    oExcel.Quit
+    Set oSheet = Nothing
+    Set oBook = Nothing
+    Set oExcel = Nothing
+    
+    FileSystem.FileCopy App.Path & "\" & Name & ".xls", App.Path & "\Backup\" & Name & ".xls"
+    FileSystem.Kill (App.Path & "\" & Name & ".xls")
+    'Call fnBackup(Name & ".xls")
+    'fnCreateExcelReport = True
+    
+Exit Function
+
+Err:
+    Set oSheet = Nothing
+    Set oBook = Nothing
+    oExcel.Quit
+    Set oExcel = Nothing
+    
+    If Err.Number <> 0 Then
+        fnWriteErrLog Err.Description, Err.Number
+        'Err.Clear
+    End If
+            
+    Call Send_eMail("CPT Report - Failed.<br>Error Description: " & Err.Description, "CPT Report - Failed", "", "", "")
+    Err.Clear
+    'Close Log file
+    fnCloseLog
+    End
+    
+End Function
+
+Sub fnWriteErrLog(ByVal desc As String, ByVal num As Double)
+'Write error details
+    txtStream.WriteBlankLines (1)
+    txtStream.WriteLine "Following Error/s occurred:"
+    txtStream.WriteBlankLines (1)
+    txtStream.WriteLine ("Error Number" & Space(5) & ":" & num)
+    txtStream.WriteLine ("Error Description:" & desc)
+    'txtStream.WriteLine (String(70, "*"))
+End Sub
+
+Sub fnOpenLog()
+'Open the Log file and write the starting date and time.
+    If Not fsLog.FileExists(strLogFilename) Then
+        fsLog.CreateTextFile (strLogFilename)
+    End If
+    Set txtStream = fsLog.OpenTextFile(strLogFilename, ForAppending)
+    txtStream.WriteLine ("CPT load data Program started at " & Now)
+End Sub
+Sub fnCloseLog()
+'Close the Log file and write the closing date and time.
+    'txtStream.WriteBlankLines (1)
+    txtStream.WriteLine ("CPT load data Program completed at " & Now)
+    txtStream.WriteLine (String(70, "*"))
+    Set fsLog = Nothing
+End Sub
+
+Public Function Send_eMail(Strmessage As String, strsubject As String, strtype As String, strTo As String, strCC As String) As Boolean
+On Error GoTo ErrHandler
+    Set objSendMail = CreateObject("CDONTS.NewMail")
+    Dim strinbdname As String
+    objSendMail.From = fnReadINI("Mail", "MailFrom")
+    objSendMail.To = fnReadINI("Mail", "MailTo")
+    strCC = fnReadINI("Mail", "MailCc")
+    If strCC <> "" And Not IsNull(strCC) Then
+        objSendMail.Cc = strCC
+    End If
+    objSendMail.Subject = strsubject
+    objSendMail.Body = Strmessage
+    objSendMail.BodyFormat = 0
+    objSendMail.MailFormat = 0
+    objSendMail.Importance = 2
+    objSendMail.Send
+    Set objSendMail = Nothing
+    Send_eMail = True
+Exit Function
+
+ErrHandler:
+    If Err.Number <> 0 Then
+        fnWriteErrLog Err.Description, Err.Number
+        'Err.Clear
+    End If
+    'close Log file
+    fnCloseLog
+End Function
+
+Public Sub ExecuteProcess(strProcessString As String)
+'add these vars too
+Dim lPid As Long
+Dim lHnd As Long
+Dim lRet As Long
+lPid = Shell(strProcessString, vbHide)
+If lPid <> 0 Then
+    'Get a handle to the shelled process
+    lHnd = OpenProcess(SYNCHRONIZE, 0, lPid)
+    'If successful, wait for the application to end and close the handle
+    If lHnd <> 0 Then
+        lRet = WaitForSingleObject(lHnd, INFINITE)
+        CloseHandle (lHnd)
+    End If
+End If
+End Sub
+Sub fnWriteLog(ByVal msg As String)
+    txtStream.WriteLine (msg)
+End Sub
